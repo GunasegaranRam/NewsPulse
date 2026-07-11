@@ -1,4 +1,4 @@
-# 🚀 AI Radio Host: V2 Developer Log
+# 🚀 NewsPulse: V2 Developer Log
 
 Welcome to the V2 Dev Log. This document serves as a historical record of our journey taking the project from a simple V1 MVP to a robust, interactive, Agentic Voice Assistant.
 

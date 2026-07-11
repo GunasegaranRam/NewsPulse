@@ -1,7 +1,7 @@
-# Personalized AI Radio Host (Unicorn Track)
+# NewsPulse (Personalized AI News Agent)
 
 This project is built for the **AMD Developer Hackathon: ACT II** (Unicorn Track). 
-It is an autonomous AI Agent that acts as a personalized radio host. 
+It is an autonomous AI Agent that acts as a personalized, interactive news host. 
 
 ## How it works (Agentic Workflow)
 1. **Search Tool:** The agent uses DuckDuckGo News to scrape the latest, real-time headlines on a user-provided topic.

@@ -1,9 +1,9 @@
-# 🚀 AI Radio Host: V3 Developer Log
+# 🚀 NewsPulse: V3 Developer Log
 
 Welcome to the V3 Dev Log! This document outlines the major architectural upgrades we implemented to transition the project from a V2 functional prototype to a true production-grade Startup Product.
 
 ## The V3 Vision (Speed & Conversational Continuity)
-In V2, we proved that we could synthesize a dynamic AI Radio Host in the browser. However, there were severe latency issues (re-searching Google News for every single follow-up question) and UI friction (the Microphone button wasn't fluid enough). 
+In V2, we proved that we could synthesize a dynamic AI News Host in the browser. However, there were severe latency issues (re-searching Google News for every single follow-up question) and UI friction (the Microphone button wasn't fluid enough). 
 
 For V3, we attacked these exact pain points with several massive upgrades:
 

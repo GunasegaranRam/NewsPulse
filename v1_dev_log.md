@@ -1,9 +1,9 @@
-# V1 Development Log & Post-Mortem
+# 🚀 NewsPulse: V1 Developer Log
 
-This document serves as a comprehensive record of the initial planning, the hurdles encountered, and the architectural changes made during the development of the V1 MVP of the AI Radio Host.
+Welcome to the V1 Dev Log. This document serves as a comprehensive record of the initial planning, the hurdles encountered, and the architectural changes made during the development of the V1 MVP of NewsPulse.
 
 ## 1. Initial Plan
-The original goal was to build a simple, containerized web application that acts as an AI radio host. The planned stack was:
+The original goal was to build a simple, containerized web application that acts as an AI interactive news host. The planned stack was:
 *   **Frontend:** Streamlit (`app.py`) for a fast, interactive web UI.
 *   **News Source:** `duckduckgo-search` library to pull recent news articles.
 *   **LLM Brain:** Fireworks AI (using standard Llama 3 models) via the OpenAI python client to synthesize scripts.

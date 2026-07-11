@@ -15,7 +15,7 @@ memory = {
     }
 }
 
-app = FastAPI(title="AI Radio Host API")
+app = FastAPI(title="NewsPulse API")
 
 class GenerateRequest(BaseModel):
     topic: str
