@@ -16,8 +16,8 @@ RUN uv pip install --system -r requirements.txt
 # Copy the rest of the application code
 COPY . .
 
-# Expose the port Streamlit runs on
-EXPOSE 8501
+# Expose the port FastAPI runs on
+EXPOSE 8000
 
 # Run the application
-CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]

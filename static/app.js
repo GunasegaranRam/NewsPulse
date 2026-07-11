@@ -1,6 +1,7 @@
 const centralBtn = document.getElementById('central-btn');
 const iconMic = document.getElementById('icon-mic');
 const iconPause = document.getElementById('icon-pause');
+const iconPlay = document.getElementById('icon-play');
 const iconStop = document.getElementById('icon-stop');
 const iconSendCentral = document.getElementById('icon-send-central');
 
@@ -12,11 +13,22 @@ const statusText = document.getElementById('status-text');
 const grid = document.getElementById('flashcards-container');
 const audioPlayer = document.getElementById('audio-player');
 
-// Context Memory for Agentic Searches
+// Context Memory
 let currentContext = [];
 
 // Initialize Web Speech API
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+let audioUnlocked = false;
+function unlockAudio() {
+    if (audioUnlocked) return;
+    // Play and immediately pause to unlock the audio element on iOS/Chrome
+    audioPlayer.play().then(() => {
+        audioPlayer.pause();
+        audioPlayer.currentTime = 0;
+    }).catch(() => {});
+    audioUnlocked = true;
+}
 
 if (!SpeechRecognition) {
     alert("Speech Recognition API is not supported in this browser. Please use Google Chrome or Safari.");
@@ -33,6 +45,7 @@ function updateCentralButton() {
     // Hide all icons first
     iconMic.classList.add('hidden');
     iconPause.classList.add('hidden');
+    iconPlay.classList.add('hidden');
     iconStop.classList.add('hidden');
     iconSendCentral.classList.add('hidden');
     centralBtn.classList.remove('active');
@@ -53,37 +66,117 @@ function updateCentralButton() {
         iconPause.classList.remove('hidden');
         centralBtn.title = "Pause Audio";
     } 
-    // State 4: Default Mic
+    // State 4: Audio is paused
+    else if (audioPlayer.paused && audioPlayer.currentTime > 0 && !audioPlayer.ended) {
+        iconPlay.classList.remove('hidden');
+        centralBtn.title = "Play Audio";
+    }
+    // State 5: Default Mic
     else {
         iconMic.classList.remove('hidden');
         centralBtn.title = "Click to Speak";
     }
 }
 
-centralBtn.addEventListener('click', async () => {
+let pressTimer;
+let isHolding = false;
+let clickCount = 0;
+let clickTimeout;
+
+centralBtn.addEventListener('pointerdown', (e) => {
+    e.preventDefault(); // Prevent double-firing on touch
+    
+    // State 1: Send Text (skip hold logic)
+    if (textInput.value.trim() !== '') return;
+    
+    isHolding = false;
+    
+    // Only enable hold-to-interrupt if Christopher is active
+    const isChristopherActive = (!audioPlayer.paused && audioPlayer.currentTime > 0 && !audioPlayer.ended) || 
+                                (audioPlayer.paused && audioPlayer.currentTime > 0 && !audioPlayer.ended);
+                                
+    if (isChristopherActive) {
+        pressTimer = setTimeout(() => {
+            isHolding = true;
+            if (!audioPlayer.paused) audioPlayer.pause();
+            if (!isRecording) startRecording();
+        }, 300); // 300ms defines a hold
+    }
+});
+
+centralBtn.addEventListener('pointerup', (e) => {
+    e.preventDefault();
+    clearTimeout(pressTimer);
+    
     // State 1: Send Text
     if (textInput.value.trim() !== '') {
         const topic = textInput.value.trim();
-        await generateContent(topic);
-    } 
-    // State 2: Stop Recording
-    else if (isRecording) {
-        stopRecording();
-    } 
-    // State 3: Pause Audio
-    else if (!audioPlayer.paused && audioPlayer.currentTime > 0 && !audioPlayer.ended) {
-        audioPlayer.pause();
-    } 
-    // State 4: Start Recording
-    else {
-        startRecording();
+        generateContent(topic);
+        return;
+    }
+    
+    // State 2: Stop Hold-to-Talk Recording
+    if (isHolding) {
+        isHolding = false;
+        if (isRecording) stopRecording();
+        return;
+    }
+    
+    // If we reach here, it was a click (not a hold)
+    const isChristopherActive = (!audioPlayer.paused && audioPlayer.currentTime > 0 && !audioPlayer.ended) || 
+                                (audioPlayer.paused && audioPlayer.currentTime > 0 && !audioPlayer.ended);
+                                
+    if (isChristopherActive) {
+        // Christopher is active: Handle Single/Double click
+        clickCount++;
+        if (clickCount === 1) {
+            // Instant Pause on first click!
+            if (!audioPlayer.paused) {
+                audioPlayer.pause();
+            }
+            
+            clickTimeout = setTimeout(() => {
+                clickCount = 0; // Commit to single click
+            }, 300); // 300ms window for double click
+        } else if (clickCount === 2) {
+            clearTimeout(clickTimeout);
+            clickCount = 0;
+            // Double Click -> Unpause
+            if (audioPlayer.paused) {
+                audioPlayer.play();
+            }
+        }
+    } else {
+        // Christopher is NOT active: Normal Click-to-Toggle
+        if (isRecording) {
+            stopRecording();
+        } else {
+            startRecording();
+        }
+    }
+});
+
+centralBtn.addEventListener('pointercancel', () => {
+    clearTimeout(pressTimer);
+    if (isHolding) {
+        isHolding = false;
+        if (isRecording) stopRecording();
     }
 });
 
 // Audio Player Event Listeners (Triggers State Machine)
-audioPlayer.addEventListener('play', updateCentralButton);
-audioPlayer.addEventListener('pause', updateCentralButton);
-audioPlayer.addEventListener('ended', updateCentralButton);
+audioPlayer.addEventListener('play', () => {
+    updateCentralButton();
+    centralBtn.classList.add('playing');
+});
+audioPlayer.addEventListener('pause', () => {
+    updateCentralButton();
+    centralBtn.classList.remove('playing');
+});
+audioPlayer.addEventListener('ended', () => {
+    updateCentralButton();
+    centralBtn.classList.remove('playing');
+});
 
 // Text Input Listeners (Triggers State Machine)
 textInput.addEventListener('input', () => {
@@ -216,3 +309,7 @@ function hideStatus() {
 
 // Initial state load
 updateCentralButton();
+
+// GLOBAL AUDIO UNLOCK: Browsers strictly require a standard "click" or "touchstart" 
+document.body.addEventListener('click', unlockAudio);
+document.body.addEventListener('touchstart', unlockAudio);

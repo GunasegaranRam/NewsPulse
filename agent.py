@@ -36,45 +36,58 @@ def search_news(topic, max_results=5):
     return results
 
 def extract_intent(user_input, current_context):
-    """Uses LLM to deduce the real search query if the user uses relative terms like 'the first one'."""
     if not current_context:
-        return user_input # No context, return raw input
-        
+        return user_input
+    
     api_key = os.environ.get("FIREWORKS_API_KEY")
     client = OpenAI(base_url="https://api.fireworks.ai/inference/v1", api_key=api_key)
-    
+        
     prompt = (
         f"The user input is: '{user_input}'.\n"
         f"The current flashcards on their screen are: {current_context}.\n\n"
-        "Your goal is to extract the purest, most effective Google News search query from the user input.\n"
-        "- If the user uses a relative term (e.g., 'the first one', 'that tech story'), map it to the exact flashcard topic.\n"
-        "- If the user says 'Deep dive into X' or 'Tell me about X', output ONLY 'X'.\n"
-        "- Do NOT include conversational filler like 'Deep dive into' or 'Search for'.\n"
-        "Output ONLY the final search query. Nothing else."
+        "Your goal is to act as an Intelligent Router. Decide if the user is asking a conversational follow-up question, or if they are asking for a new deep-dive search.\n"
+        "1. CONVERSATIONAL: If the user is asking you to explain something you just said, asking a follow-up question, or asking to go into detail about one of the flashcards (e.g., 'Explain what HBM memory is', 'Tell me more about the first one', 'Deep dive into that', 'what is the first one'), output ONLY the exact word 'CONVERSATIONAL'.\n"
+        "2. SEARCH: If the user is asking to search for a completely new topic from the internet (e.g., 'What is the latest news on Apple', 'Search for tech news'). Extract the purest Google News search query from their input (e.g., 'Apple').\n"
+        "Output ONLY the final search query, or the word 'CONVERSATIONAL'. Nothing else."
     )
     
     response = client.chat.completions.create(
         model="accounts/fireworks/models/gpt-oss-120b",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.1,
-        max_tokens=20
+        max_tokens=50
     )
     
     content = response.choices[0].message.content
+    query = ""
     if content:
         query = content.strip()
-        print(f"LLM Extracted Intent: '{query}'")
-    else:
-        query = user_input
-        print(f"LLM Glitch (None). Fallback to Raw Input: '{query}'")
+        print(f"LLM Extracted Intent/Route: '{query}'")
         
+        # Robust parsing: If the LLM included preamble but has the word CONVERSATIONAL
+        if "CONVERSATIONAL" in query.upper():
+            return "CONVERSATIONAL"
+            
+        # Clean up quotes if the LLM wrapped it
+        query = query.replace('"', '').replace("'", "")
+    
     if not query:
+        print(f"LLM Glitch (None). Fallback to Rules for: '{user_input}'")
         query = user_input
+        
+    # Rule-based fallback: If the router failed to say CONVERSATIONAL, 
+    # but the input clearly references existing context
+    conversational_triggers = ["first", "second", "third", "last", "this", "that", "more", "explain", "why", "mean"]
+    if any(trigger in query.lower() for trigger in conversational_triggers) and len(query.split()) < 10:
+        print("Rule-based router override: Detected conversational trigger.")
+        return "CONVERSATIONAL"
+        
     return query
 
-def generate_content(topic, news_items):
-    """Uses Fireworks AI to generate a radio script and UI flashcards."""
-    print("Generating content...")
+def generate_content(topic, news_items, chat_history=None, is_conversational=False):
+    if chat_history is None:
+        chat_history = []
+    
     api_key = os.environ.get("FIREWORKS_API_KEY")
     if not api_key:
         raise ValueError("FIREWORKS_API_KEY environment variable not set.")
@@ -85,36 +98,39 @@ def generate_content(topic, news_items):
         api_key=api_key,
     )
     
-    # Prepare the context from the news
-    context = ""
-    for idx, item in enumerate(news_items):
-        context += f"Headline {idx+1}: {item.get('title')}\nSummary: {item.get('body')}\n\n"
-    
     system_prompt = (
-        "You are an energetic and engaging AI radio host. "
-        "You will be given a list of recent news headlines and summaries about a topic. "
-        "Your job is to write a comprehensive, 60-second broadcast script summarizing the news in detail, and ALSO extract strictly constricted flashcards for the UI. "
-        "The AUDIO script must be highly detailed and comprehensive. The FLASHCARDS must be heavily constricted, showing only minimal keywords/numbers. "
-        "Speak directly to the listeners in the script. Do NOT say any greetings like 'Hello listeners', just dive straight into the news. "
-        "IMPORTANT: You MUST output ONLY valid JSON. Do not wrap it in markdown block quotes (no ```json). "
-        "CRITICAL: Escape all newlines inside strings as \\n. Do NOT use literal newlines inside JSON strings. "
-        "The JSON must have this exact structure: "
-        "{ "
-        "  \"spoken_script\": \"The highly comprehensive energetic broadcast script here. Escape quotes and use \\n for newlines.\", "
-        "  \"flashcards\": [ "
-        "    { \"headline\": \"Constricted Short Title\", \"key_stat\": \"E.g., +4.5%\", \"short_summary\": \"1 heavily constricted sentence\" } "
-        "  ] "
-        "}"
+        "You are Christopher, a highly engaging, energetic AI radio host. You speak conversationally, with crisp enunciation and perfect pacing.\n"
+        "Do NOT say any greetings like 'Good morning' or 'Hello listeners'. Dive straight into the core information.\n"
+        "If you are answering a conversational follow-up question, answer the user's specific question using the provided news items and chat history as background knowledge. Go into extremely deep detail if requested.\n"
+        "If you are NOT answering a conversational question, summarize the provided news items into an exciting 1-minute news broadcast script.\n"
+        "You must ALWAYS return your response in this EXACT JSON structure:\n"
+        "{\n"
+        "  \"spoken_script\": \"The highly comprehensive energetic broadcast script or your conversational answer. Escape quotes and use \\n for newlines.\",\n"
+        "  \"flashcards\": [\n"
+        "    { \"headline\": \"Topic Name\", \"key_stat\": \"Key metric\", \"short_summary\": \"A HIGHLY DETAILED, comprehensive paragraph explaining the core story in depth.\" }\n"
+        "  ]\n"
+        "If the user is asking for a deep dive or follow up on a specific topic, make the flashcard summaries extremely detailed and comprehensive paragraphs.\n"
+        "}\n"
     )
     
-    user_prompt = f"Topic: {topic}\n\nNews Feeds:\n{context}\n\nWrite the broadcast content in JSON format now."
+    messages = [{"role": "system", "content": system_prompt}]
+    
+    # Append the last 6 turns of chat history to keep context
+    for msg in chat_history[-6:]:
+        messages.append(msg)
+        
+    news_text = "\n\n".join([f"Headline: {item['title']}\nSummary: {item['body']}" for item in news_items]) if news_items else "No news available."
+    
+    if is_conversational:
+        latest_prompt = f"Background News Context:\n{news_text}\n\nGenerate the conversational JSON answer to the user's last question."
+    else:
+        latest_prompt = f"Here are the latest news items for the topic '{topic}':\n{news_text}\n\nWrite the broadcast content in JSON format now."
+        
+    messages.append({"role": "user", "content": latest_prompt})
     
     response = client.chat.completions.create(
         model="accounts/fireworks/models/gpt-oss-120b",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ],
+        messages=messages,
         temperature=0.7,
         max_tokens=2000,
         response_format={"type": "json_object"}
